@@ -54,10 +54,26 @@ async function buildServer() {
 }
 
 // For Vercel serverless deployment
+let app: any = null;
+
 export default async function handler(req: any, res: any) {
-  const app = await buildServer();
-  await app.ready();
-  app.server.emit('request', req, res);
+  if (!app) {
+    app = await buildServer();
+    await app.ready();
+  }
+  
+  return app.inject({
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    payload: req.body,
+  }).then((response: any) => {
+    res.statusCode = response.statusCode;
+    Object.keys(response.headers).forEach(key => {
+      res.setHeader(key, response.headers[key]);
+    });
+    res.end(response.payload);
+  });
 }
 
 // For local development

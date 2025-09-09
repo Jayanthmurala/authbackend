@@ -3,23 +3,14 @@
   "name": "nexus-auth-service",
   "builds": [
     {
-      "src": "src/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "prisma/**",
-          "src/**",
-          "scripts/**",
-          "package.json",
-          "tsconfig.json"
-        ]
-      }
+      "src": "api/index.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/src/index.ts"
+      "dest": "/api/index.js"
     }
   ],
   "env": {
