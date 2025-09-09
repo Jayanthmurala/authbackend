@@ -25,11 +25,6 @@
   "env": {
     "NODE_ENV": "production"
   },
-  "functions": {
-    "src/index.ts": {
-      "maxDuration": 30
-    }
-  },
   "installCommand": "npm ci && npx prisma generate",
   "buildCommand": "npm run build"
 }
