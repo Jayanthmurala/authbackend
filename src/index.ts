@@ -53,38 +53,12 @@ async function buildServer() {
   return app;
 }
 
-// For Vercel serverless deployment
-let app: any = null;
-
-export default async function handler(req: any, res: any) {
-  if (!app) {
-    app = await buildServer();
-    await app.ready();
-  }
-  
-  return app.inject({
-    method: req.method,
-    url: req.url,
-    headers: req.headers,
-    payload: req.body,
-  }).then((response: any) => {
-    res.statusCode = response.statusCode;
-    Object.keys(response.headers).forEach(key => {
-      res.setHeader(key, response.headers[key]);
-    });
-    res.end(response.payload);
+buildServer()
+  .then((app) => app.listen({ port: env.PORT, host: "0.0.0.0" }))
+  .then((address) => {
+    console.log(`Auth service listening at ${address}`);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
-}
-
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-  buildServer()
-    .then((app) => app.listen({ port: env.PORT, host: "0.0.0.0" }))
-    .then((address) => {
-      console.log(`Auth service listening at ${address}`);
-    })
-    .catch((err) => {
-      console.error(err);
-      process.exit(1);
-    });
-}
