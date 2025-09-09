@@ -53,12 +53,22 @@ async function buildServer() {
   return app;
 }
 
-buildServer()
-  .then((app) => app.listen({ port: env.PORT, host: "0.0.0.0" }))
-  .then((address) => {
-    console.log(`Auth service listening at ${address}`);
-  })
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+// For Vercel serverless deployment
+export default async function handler(req: any, res: any) {
+  const app = await buildServer();
+  await app.ready();
+  app.server.emit('request', req, res);
+}
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  buildServer()
+    .then((app) => app.listen({ port: env.PORT, host: "0.0.0.0" }))
+    .then((address) => {
+      console.log(`Auth service listening at ${address}`);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
