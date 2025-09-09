@@ -7,6 +7,7 @@ import { env } from "../config/env";
 import { hashPassword, verifyPassword, hashSecret, verifySecret } from "../utils/crypto";
 import { signAccessToken, verifyAccessToken } from "../utils/jwt";
 import { authSuccessResponseSchema, loginBodySchema, errorResponseSchema, oauthExchangeBodySchema, forgotPasswordBodySchema, resetPasswordBodySchema, verifyEmailBodySchema, resendVerificationBodySchema, messageResponseSchema, registerBodySchema, superAdminRegisterBodySchema } from "../schemas/auth.schemas";
+import { ProfileInitializationService } from "../services/ProfileInitializationService";
 
 const usersQuerySchema = z.object({
   limit: z.string().optional(),
@@ -274,6 +275,19 @@ export async function authRoutes(app: FastifyInstance) {
 
     await issueRefreshTokenCookie(user.id, reply);
 
+    // Initialize user profile asynchronously for new registration
+    ProfileInitializationService.initializeUserProfileAsync({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      roles: user.roles,
+      avatarUrl: user.avatarUrl,
+      collegeId: user.collegeId,
+      department: user.department,
+      year: user.year,
+      collegeMemberId: user.collegeMemberId,
+    });
+
     return reply.code(201).send({
       accessToken,
       user: {
@@ -282,6 +296,10 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: user.displayName,
         roles: user.roles,
         avatarUrl: user.avatarUrl ?? null,
+        collegeId: user.collegeId,
+        department: user.department,
+        year: user.year,
+        collegeMemberId: user.collegeMemberId,
       },
     });
   });
@@ -451,6 +469,19 @@ export async function authRoutes(app: FastifyInstance) {
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     await issueRefreshTokenCookie(user.id, reply);
 
+    // Initialize user profile asynchronously (doesn't block login)
+    ProfileInitializationService.initializeUserProfileAsync({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      roles: user.roles,
+      avatarUrl: user.avatarUrl,
+      collegeId: user.collegeId,
+      department: user.department,
+      year: user.year,
+      collegeMemberId: user.collegeMemberId,
+    });
+
     const accessToken = await signAccessToken(user.id, {
       email: user.email,
       roles: user.roles,
@@ -466,6 +497,10 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: user.displayName,
         roles: user.roles,
         avatarUrl: user.avatarUrl ?? null,
+        collegeId: user.collegeId,
+        department: user.department,
+        year: user.year,
+        collegeMemberId: user.collegeMemberId,
       },
     });
   });
@@ -555,13 +590,22 @@ export async function authRoutes(app: FastifyInstance) {
       params: z.object({ userId: z.string().cuid() }),
       body: z.object({ 
         displayName: z.string().min(1).max(100).optional(),
-        avatarUrl: z.string().url().optional()
+        avatarUrl: z.string().url().optional(),
+        collegeId: z.string().cuid().optional(),
+        department: z.string().min(1).max(100).optional(),
+        year: z.number().int().min(1).max(6).optional()
       }),
       response: { 200: z.any(), 404: errorResponseSchema },
     },
   }, async (req, reply) => {
     const { userId } = req.params as { userId: string };
-    const { displayName, avatarUrl } = req.body as { displayName?: string; avatarUrl?: string };
+    const { displayName, avatarUrl, collegeId, department, year } = req.body as { 
+      displayName?: string; 
+      avatarUrl?: string; 
+      collegeId?: string; 
+      department?: string; 
+      year?: number; 
+    };
     
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -571,10 +615,28 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(404).send({ message: "User not found" });
     }
 
+    // Validate college if provided
+    if (collegeId) {
+      const college = await prisma.college.findUnique({ where: { id: collegeId } });
+      if (!college || !college.isActive) {
+        return reply.code(400).send({ message: "Invalid or inactive college" });
+      }
+      
+      // Validate department exists in college
+      if (department && !college.departments.includes(department)) {
+        return reply.code(400).send({ 
+          message: `Department '${department}' not available in '${college.name}'. Available: ${college.departments.join(', ')}` 
+        });
+      }
+    }
+
     // Build update data object
     const updateData: any = {};
     if (displayName !== undefined) updateData.displayName = displayName;
     if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+    if (collegeId !== undefined) updateData.collegeId = collegeId;
+    if (department !== undefined) updateData.department = department;
+    if (year !== undefined) updateData.year = year;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -594,6 +656,123 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     return reply.send({ user: updatedUser });
+  });
+
+  // Complete user profile (for users with incomplete college affiliation)
+  f.put("/v1/auth/complete-profile", {
+    schema: {
+      tags: ["auth"],
+      body: z.object({
+        collegeId: z.string().cuid(),
+        department: z.string().min(1).max(100),
+        year: z.number().int().min(1).max(6).optional(),
+        collegeMemberId: z.string().min(1).max(50).optional()
+      }),
+      response: { 200: z.any(), 400: errorResponseSchema, 401: errorResponseSchema },
+    },
+  }, async (req, reply) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return reply.code(401).send({ message: "Missing or invalid authorization header" });
+    }
+
+    try {
+      const token = authHeader.substring(7);
+      const payload = await verifyAccessToken(token);
+      const userId = payload.sub;
+
+      const { collegeId, department, year, collegeMemberId } = req.body as {
+        collegeId: string;
+        department: string;
+        year?: number;
+        collegeMemberId?: string;
+      };
+
+      // Validate college exists and is active
+      const college = await prisma.college.findUnique({ where: { id: collegeId } });
+      if (!college || !college.isActive) {
+        return reply.code(400).send({ 
+          message: `College not found or inactive. Please contact your administrator.` 
+        });
+      }
+
+      // Validate department exists in college
+      if (!college.departments.includes(department)) {
+        return reply.code(400).send({ 
+          message: `Department '${department}' not available in '${college.name}'. Available: ${college.departments.join(', ')}` 
+        });
+      }
+
+      // Check if collegeMemberId is unique within the college (if provided)
+      if (collegeMemberId) {
+        const existingMember = await prisma.user.findFirst({
+          where: {
+            collegeId,
+            collegeMemberId,
+            id: { not: userId }, // Exclude current user
+          },
+        });
+        if (existingMember) {
+          return reply.code(400).send({ 
+            message: `College member ID '${collegeMemberId}' already exists in '${college.name}'. Please use a different member ID.` 
+          });
+        }
+      }
+
+      // Update user profile
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          collegeId,
+          department,
+          year,
+          collegeMemberId,
+        },
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          avatarUrl: true,
+          roles: true,
+          collegeId: true,
+          department: true,
+          year: true,
+          collegeMemberId: true,
+          updatedAt: true,
+        },
+      });
+
+      return reply.send({ 
+        message: "Profile completed successfully",
+        user: updatedUser 
+      });
+
+    } catch (error) {
+      console.error("Profile completion error:", error);
+      return reply.code(401).send({ message: "Invalid or expired token" });
+    }
+  });
+
+  // Cron job endpoint to retry failed profile initializations
+  f.post("/v1/auth/retry-profile-inits", {
+    schema: {
+      tags: ["auth"],
+      response: { 200: messageResponseSchema, 401: errorResponseSchema },
+    },
+  }, async (req, reply) => {
+    // Simple auth check - could be enhanced with API key
+    const authHeader = req.headers.authorization;
+    if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET || 'cron-secret'}`) {
+      return reply.code(401).send({ message: "Unauthorized - Invalid cron secret" });
+    }
+
+    try {
+      await ProfileInitializationService.retryPendingProfileInits();
+      return reply.send({ message: "Profile initialization retry completed" });
+    } catch (error) {
+      console.error("Profile retry cron job failed:", error);
+      return reply.code(500).send({ message: "Profile retry failed" });
+    }
   });
 }
 

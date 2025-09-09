@@ -121,3 +121,12 @@ model UserPreference {
   locale                    String  @default("en")
   user                      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model PendingProfileInit {
+  userId     String   @id
+  retryCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([retryCount, updatedAt])
+}

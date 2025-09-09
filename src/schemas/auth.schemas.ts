@@ -39,6 +39,10 @@ export const authUserSchema = z.object({
   displayName: z.string(),
   roles: z.array(superAdminRoleEnum),
   avatarUrl: z.string().url().nullable().optional(),
+  collegeId: z.string().nullable().optional(),
+  department: z.string().nullable().optional(),
+  year: z.number().int().nullable().optional(),
+  collegeMemberId: z.string().nullable().optional(),
 });
 
 export const authSuccessResponseSchema = z.object({
