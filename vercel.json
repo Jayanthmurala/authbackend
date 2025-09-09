@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "name": "nexus-auth-service",
+  "builds": [
+    {
+      "src": "src/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "prisma/**",
+          "src/**",
+          "scripts/**",
+          "package.json",
+          "tsconfig.json"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/src/index.ts"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "src/index.ts": {
+      "maxDuration": 30
+    }
+  },
+  "installCommand": "npm ci && npx prisma generate",
+  "buildCommand": "npm run build"
+}
