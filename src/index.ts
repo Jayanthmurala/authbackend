@@ -19,7 +19,7 @@ async function buildServer() {
   app.setSerializerCompiler(serializerCompiler);
 
   await app.register(cors, {
-    origin: true,
+    origin: "*",
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type"],
   });
