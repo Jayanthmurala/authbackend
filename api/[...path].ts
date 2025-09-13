@@ -1,4 +1,3 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -72,16 +71,41 @@ async function buildServer() {
   return fastify;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(request: Request): Promise<Response> {
   try {
     const server = await buildServer();
     await server.ready();
-    server.server.emit('request', req, res);
+    
+    const url = new URL(request.url);
+    const method = request.method;
+    const headers = Object.fromEntries(request.headers.entries());
+    
+    // Handle request body properly
+    let payload: string | undefined;
+    if (request.body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      payload = await request.text();
+    }
+
+    // Use Fastify's inject method for serverless compatibility
+    const response = await server.inject({
+      method: method as any,
+      url: url.pathname + url.search,
+      headers,
+      payload,
+    });
+
+    return new Response(response.payload, {
+      status: response.statusCode,
+      headers: response.headers as any,
+    });
   } catch (error) {
     console.error('Auth service error:', error);
-    res.status(500).json({ 
+    return new Response(JSON.stringify({ 
       error: 'Internal Server Error',
       message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 }
