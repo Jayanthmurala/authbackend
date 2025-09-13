@@ -153,8 +153,73 @@ async function getGithubProfile(accessToken: string) {
   };
 }
 
-export async function authRoutes(app: FastifyInstance) {
+async function authRoutes(app: FastifyInstance) {
   const f = app.withTypeProvider<ZodTypeProvider>();
+
+  // GET /v1/auth/me - Get current user profile
+  f.get("/v1/auth/me", {
+    schema: {
+      tags: ["auth"],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: z.object({
+          id: z.string(),
+          email: z.string(),
+          name: z.string(),
+          roles: z.array(z.string()),
+          collegeId: z.string().optional(),
+          collegeMemberId: z.string().optional(),
+          isEmailVerified: z.boolean(),
+          createdAt: z.date(),
+          updatedAt: z.date()
+        }),
+        401: errorResponseSchema
+      }
+    }
+  }, async (req, reply) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return reply.code(401).send({ message: 'Unauthorized' });
+    }
+    
+    try {
+      const token = authHeader.slice('Bearer '.length);
+      const payload = await verifyAccessToken(token);
+      
+      const user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          roles: true,
+          collegeId: true,
+          collegeMemberId: true,
+          emailVerifiedAt: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+      
+      if (!user) {
+        return reply.code(401).send({ message: 'User not found' });
+      }
+      
+      return reply.send({
+        id: user.id,
+        email: user.email,
+        name: user.displayName,
+        roles: user.roles,
+        collegeId: user.collegeId || undefined,
+        collegeMemberId: user.collegeMemberId || undefined,
+        isEmailVerified: !!user.emailVerifiedAt,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      });
+    } catch (error) {
+      return reply.code(401).send({ message: 'Invalid token' });
+    }
+  });
 
   f.post("/v1/auth/register", {
     schema: {
