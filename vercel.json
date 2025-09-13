@@ -7,5 +7,5 @@
     }
   },
   "installCommand": "npm ci && npx prisma generate",
-  "buildCommand": "npm run build"
+  "buildCommand": "mkdir -p public && echo '{}' > public/package.json"
 }
