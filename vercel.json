@@ -7,8 +7,5 @@
     }
   },
   "installCommand": "npm ci && npx prisma generate",
-  "buildCommand": "mkdir -p public && echo '{}' > public/package.json",
-  "engines": {
-    "node": "18.x"
-  }
+  "buildCommand": "mkdir -p public && echo '{}' > public/package.json"
 }
