@@ -2,5 +2,11 @@
   "version": 2,
   "name": "nexus-auth-service",
   "installCommand": "npm ci && npx prisma generate",
-  "buildCommand": "mkdir -p public && echo '{}' > public/package.json"
+  "buildCommand": "mkdir -p public && echo '{}' > public/package.json",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/[...path]"
+    }
+  ]
 }

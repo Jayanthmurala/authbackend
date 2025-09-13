@@ -80,6 +80,9 @@ export default async function handler(request: Request): Promise<Response> {
     const method = request.method;
     const headers = Object.fromEntries(request.headers.entries());
     
+    // Get the full path for routing
+    let path = url.pathname;
+    
     // Handle request body properly
     let payload: string | undefined;
     if (request.body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -89,7 +92,7 @@ export default async function handler(request: Request): Promise<Response> {
     // Use Fastify's inject method for serverless compatibility
     const response = await server.inject({
       method: method as any,
-      url: url.pathname + url.search,
+      url: path + url.search,
       headers,
       payload,
     });
@@ -102,7 +105,7 @@ export default async function handler(request: Request): Promise<Response> {
     console.error('Auth service error:', error);
     return new Response(JSON.stringify({ 
       error: 'Internal Server Error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+      message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Something went wrong'
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
