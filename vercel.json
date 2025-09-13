@@ -1,11 +1,6 @@
 {
   "version": 2,
   "name": "nexus-auth-service",
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "installCommand": "npm ci && npx prisma generate",
   "buildCommand": "mkdir -p public && echo '{}' > public/package.json"
 }
