@@ -3,13 +3,9 @@
   "name": "nexus-auth-service",
   "functions": {
     "api/**/*.ts": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 30
+      "runtime": "@vercel/node@3.0.0"
     }
   },
   "installCommand": "npm ci && npx prisma generate",
-  "buildCommand": "npm run build",
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "buildCommand": "npm run build"
 }
